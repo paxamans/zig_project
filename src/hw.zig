@@ -51,43 +51,44 @@ pub fn SGD(data: [][]f32, initialParams: []f32, learningRate: f32, epochs: u32) 
 /// Throws: Any errors related to file handling or data parsing will cause the function to exit with an error state.
 pub fn main() anyerror!void {
     const allocator = std.heap.page_allocator; // Use the page allocator from the standard library for any needed dynamic memory allocation.
+    const allocator = std.heap.page_allocator;
 
     // Open the file 'data.csv' from the current working directory with read permissions
     const file = try std.fs.cwd().openFile("data.csv", .{ .read = true });
     defer file.close(); // Ensure the file is closed when the function exits, whether normally or due to an error.
-
-    var buffer: [4096]u8 = undefined; // Declare a static buffer which will be used by the BufferedReader to store read data temporarily.
-    
-    // Create a BufferedReader to efficiently read the file. The BufferedReader uses the static buffer we provided.
+    defer file.close();
+    var buffer: [4096]u8 = undefined;
     var reader = io.bufferedReader(file.reader()).reader();
 
-    // Continuously read each line from the file until EOF is encountered. Assumes that each line ends with '\n'.
+    // Initialize a dynamic array to store the data.
+    var data = try allocator.alloc([]f32, 100); // Assuming a maximum of 100 samples for simplicity.
+    var count: usize = 0;
+
     while (true) {
         const line = try reader.readUntilDelimiterOrEof('\n');
-        if (line == null) break; // When readUntilDelimiterOrEof returns null, it signals EOF, so break the while loop.
-
+        if (line == null) break;
         // line is a slice pointing to the part of the buffer containing the line read from the file (excluding the newline character if any).
-        // Process the line here (e.g., split the line on commas, parse each field).
-
-        // Example of processing the line (not robust, for simple parsing demonstration)
-        var cells = std.mem.tokenize(line, ",");
-        var data_row = try allocator.alloc(f32, 4); // example: assuming each line will have 4 float numbers
-        defer allocator.free(data_row); // Defer the deallocation of data_row to when it goes out of scope.
+        var data_row = try allocator.alloc(f32, 2); // Assuming each line has 2 float numbers.
         var index: usize = 0;
-        for (cells) |cell| {
-            data_row[index] = try std.fmt.parseFloat(f32, cell); // Convert each cell into a floating-point number and store it in data_row.
+        var index: usize = 0;
+            data_row[index] = try std.fmt.parseFloat(f32, cell);
             index += 1;
         }
         data[count] = data_row; // Store the parsed row in the data array.
         count += 1;
     }
-
-    var initialParams: [2]f32 = [2]f32{ 0.0, 0.0 }; // Initialize model parameters.
+    var initialParams: [2]f32 = [0.0 0.0];
     var initialParamsSlice: []f32 = initialParams[0..];
+    const learningRate: f32 = 0.01;
+    const epochs: u32 = 1000;
 
-    const learningRate: f32 = 0.01; // Set learning rate.
-    const epochs: u32 = 1000; // Set number of training epochs.
+    // Adjust the call to SGD to pass a slice of the data array up to the actual count of read samples.
+    var finalParams = try SGD(data[0..count], initialParamsSlice, learningRate, epochs);
+    std.debug.print("Final parameters: {}\n", .{finalParams});
 
-    var finalParams = try SGD(data[0..count], initialParamsSlice, learningRate, epochs); // Execute SGD.
-    std.debug.print("Final parameters: {}\n", .{finalParams}); // Output the final optimized parameters.
+    // Free the allocated memory for each data row and the data array itself.
+    for (data[0..count]) |row| {
+        allocator.free(row);
+    }
+    allocator.free(data);
 }
