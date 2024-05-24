@@ -86,14 +86,14 @@ fn readData(filename: []const u8) ![][]f32 {
     var allocator = std.heap.page_allocator;
 
     // Allocate memory for the outer array.
-    var data = try allocator.alloc([][]f32, 100); // Assuming max 100 rows for simplicity.
+    var data = try allocator.alloc([]f32, 100); // Assuming max 100 rows for simplicity.
     var count: usize = 0; // To keep track of number of rows in the data array.
 
     const buffer_size = 1024; // Size of the static buffer.
-    var buffer: [buffer_size]u8 = [_]u8{0} ** buffer_size; // Declare a static buffer which will be used by the BufferedReader to store read data temporarily.
+    const buffer = [_]u8{0} ** buffer_size; // Declare a static buffer which will be used by the BufferedReader to store read data temporarily.
     
     // Create a BufferedReader to efficiently read the file. The BufferedReader uses the static buffer we provided.
-    var reader = io.bufferedReader(file.reader(), &buffer);
+    var reader = io.bufferedReader(file.reader()).reader();
 
     // Continuously read each line from the file until EOF is encountered. Assumes that each line ends with '\n'.
     while (true) {
@@ -105,7 +105,7 @@ fn readData(filename: []const u8) ![][]f32 {
 
         // Example of processing the line (not robust, for simple parsing demonstration)
         var cells = std.mem.tokenize(line.?, ",");
-        var data_row = try allocator.alloc(f32, 2); // example: assuming each line will have 2 float numbers
+        var data_row = try allocator.alloc(f32, 4); // example: assuming each line will have 4 float numbers
         defer allocator.free(data_row); // Defer the deallocation of data_row to when it goes out of scope.
         var index: usize = 0;
         for (cells) |cell| {
