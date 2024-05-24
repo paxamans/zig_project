@@ -7,7 +7,7 @@ const io = std.io;
 /// Output: Mutates the weights array in place by adjusting it based on gradients.
 pub fn updateWeights(weights: []f32, gradients: []f32, learningRate: f32) void {
     // Loop through each weight and update it based on gradient descent formula.
-    for (weights, 0..) |_, i| {
+    for (weights.len) |i| {
         weights[i] -= learningRate * gradients[i];
     }
 }
@@ -34,32 +34,66 @@ fn computeGradient(sample: []f32, gradients: []f32, weights: []f32) void {
 /// Throws: Can throw an error if memory allocation for gradients fails.
 pub fn SGD(data: [][]f32, initialParams: []f32, learningRate: f32, epochs: u32) ![]f32 {
     var params = initialParams; // Work with a mutable copy of initial parameters.
-    var rng = std.rand.DefaultPrng.init(1234); // Seed-based pseudo-random generator for sampling.
-    // Perform epoch iterations for stochastic gradient descent.
-    for (0..epochs) |_| {
-        var dataIndex = rng.random.uintLessThan(data.len); // Select a random index for stochastic nature.
-        var sample = data[dataIndex];
-        var gradients: []f32 = try std.heap.page_allocator.alloc(f32, params.len); // Allocate space for gradients.
-        defer std.heap.page_allocator.free(gradients); // Automatic cleanup of gradients.
-        computeGradient(sample, gradients, params); // Compute gradients for the selected sample.
-        updateWeights(params, gradients, learningRate); // Update model parameters based on gradients.
+    var rng = std.rand.DefaultPrng.init(1234); // Seed-based pseudo-random number generator.
+    var allocator = std.heap.page_allocator;
+
+    // Allocate memory for gradients.
+    var gradients = try allocator.alloc(f32, initialParams.len);
+    defer allocator.free(gradients);
+
+    for (0..epochs) |epoch| {
+        // Shuffle the dataset for stochastic gradient descent.
+        for (data) |sample| {
+            const rand_index = rng.random.usize(0, data.len);
+
+            // Calculate gradients for the current sample.
+            computeGradient(data[rand_index], gradients, params);
+
+            // Update parameters based on the calculated gradients.
+            updateWeights(params, gradients, learningRate);
+        }
     }
-    return params; // Return the optimized parameters after all epochs.
+
+    return params;
 }
+
 /// Function: main
-/// Description: Main entry point of the program that reads CSV data and processes it.
-/// Throws: Any errors related to file handling or data parsing will cause the function to exit with an error state.
-pub fn main() anyerror!void {
-    const allocator = std.heap.page_allocator; // Use the page allocator from the standard library for any needed dynamic memory allocation.
+/// Description: Main entry point of the program. Initializes parameters and executes the SGD algorithm.
+/// Calls readData to read the dataset from file, and finally prints the optimized parameters.
+pub fn main() !void {
+    const data = try readData("grad.txt"); // Call the function to read the dataset.
 
-    // Open the file 'data.csv' from the current working directory with read permissions
-    const file = try std.fs.cwd().openFile("data.csv", .{ .read = true });
-    defer file.close(); // Ensure the file is closed when the function exits, whether normally or due to an error.
+    var allocator = std.heap.page_allocator;
 
-    var buffer: [4096]u8 = undefined; // Declare a static buffer which will be used by the BufferedReader to store read data temporarily.
+    var initialParams: [2]f32 = [2]f32{ 0.0, 0.0 }; // Initialize model parameters.
+    var initialParamsSlice: []f32 = initialParams[0..];
+
+    const learningRate: f32 = 0.01; // Set learning rate.
+    const epochs: u32 = 1000; // Set number of training epochs.
+
+    var finalParams = try SGD(data, initialParamsSlice, learningRate, epochs); // Execute SGD.
+    std.debug.print("Final parameters: {}\n", .{finalParams}); // Output the final optimized parameters.
+}
+
+/// Function: readData
+/// Description: Reads data from a text file and returns it as a 2D array of floats.
+/// Input: filename - string containing the name of the text file.
+/// Output: 2D array of floats containing the dataset.
+fn readData(filename: []const u8) ![][]f32 {
+    var file = try std.fs.cwd().openFile(filename, std.fs.File.OpenFlag.read);
+    defer file.close();
+
+    var allocator = std.heap.page_allocator;
+
+    // Allocate memory for the outer array.
+    var data = try allocator.alloc([][]f32, 100); // Assuming max 100 rows for simplicity.
+    var count: usize = 0; // To keep track of number of rows in the data array.
+
+    const buffer_size = 1024; // Size of the static buffer.
+    var buffer: [buffer_size]u8 = [_]u8{0} ** buffer_size; // Declare a static buffer which will be used by the BufferedReader to store read data temporarily.
     
     // Create a BufferedReader to efficiently read the file. The BufferedReader uses the static buffer we provided.
-    var reader = io.bufferedReader(file.reader()).reader();
+    var reader = io.bufferedReader(file.reader(), &buffer);
 
     // Continuously read each line from the file until EOF is encountered. Assumes that each line ends with '\n'.
     while (true) {
@@ -70,8 +104,8 @@ pub fn main() anyerror!void {
         // Process the line here (e.g., split the line on commas, parse each field).
 
         // Example of processing the line (not robust, for simple parsing demonstration)
-        var cells = std.mem.tokenize(line, ",");
-        var data_row = try allocator.alloc(f32, 4); // example: assuming each line will have 4 float numbers
+        var cells = std.mem.tokenize(line.?, ",");
+        var data_row = try allocator.alloc(f32, 2); // example: assuming each line will have 2 float numbers
         defer allocator.free(data_row); // Defer the deallocation of data_row to when it goes out of scope.
         var index: usize = 0;
         for (cells) |cell| {
@@ -82,12 +116,5 @@ pub fn main() anyerror!void {
         count += 1;
     }
 
-    var initialParams: [2]f32 = [2]f32{ 0.0, 0.0 }; // Initialize model parameters.
-    var initialParamsSlice: []f32 = initialParams[0..];
-
-    const learningRate: f32 = 0.01; // Set learning rate.
-    const epochs: u32 = 1000; // Set number of training epochs.
-
-    var finalParams = try SGD(data[0..count], initialParamsSlice, learningRate, epochs); // Execute SGD.
-    std.debug.print("Final parameters: {}\n", .{finalParams}); // Output the final optimized parameters.
+    return data[0..count];
 }
