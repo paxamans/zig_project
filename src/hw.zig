@@ -16,7 +16,7 @@ pub fn updateWeights(weights: []f32, gradients: []f32, learningRate: f32) void {
 /// Description: Computes gradients based on the current model prediction error.
 /// Input: sample - single data sample (feature vector), gradients - array to hold computed gradients, weights - current model weights.
 /// Output: Fills the gradients array with computed gradient values.
-fn computeGradient(sample: []f32, gradients: []f32, weights: []f32) void {
+fn computeGradient(sample: []const f32, gradients: []f32, weights: []const f32) void {
     // Extract feature and label from sample.
     const x = sample[0];
     const y = sample[1];
@@ -32,18 +32,18 @@ fn computeGradient(sample: []f32, gradients: []f32, weights: []f32) void {
 /// Input: data - dataset, initialParams - initial model parameters, learningRate - learning rate, epochs - number of epochs.
 /// Output: Returns the optimized model parameters.
 /// Throws: Can throw an error if memory allocation for gradients fails.
-pub fn SGD(data: [][]f32, initialParams: []f32, learningRate: f32, epochs: u32) ![]f32 {
-    var params = initialParams; // Work with a mutable copy of initial parameters.
+pub fn SGD(data: [][]const f32, initialParams: []f32, learningRate: f32, epochs: u32) ![]f32 {
+    const params = initialParams; // Using `const` since it is not re-assigned.
     var rng = std.rand.DefaultPrng.init(1234); // Seed-based pseudo-random number generator.
     var allocator = std.heap.page_allocator;
 
     // Allocate memory for gradients.
-    var gradients = try allocator.alloc(f32, initialParams.len);
+    const param_len = initialParams.len;
+    const gradients = try allocator.alloc(f32, param_len);
     defer allocator.free(gradients);
 
-    for (0..epochs) |epoch| {
-        // Shuffle the dataset for stochastic gradient descent.
-        for (data) |sample| {
+    for (0..epochs) |_| { // `|_|` for unused epoch capture.
+        for (data) |_| { // `|sample|` to correctly handle sample iteration.
             const rand_index = rng.random.usize(0, data.len);
 
             // Calculate gradients for the current sample.
@@ -61,17 +61,18 @@ pub fn SGD(data: [][]f32, initialParams: []f32, learningRate: f32, epochs: u32) 
 /// Description: Main entry point of the program. Initializes parameters and executes the SGD algorithm.
 /// Calls readData to read the dataset from file, and finally prints the optimized parameters.
 pub fn main() !void {
-    const data = try readData("grad.txt"); // Call the function to read the dataset.
+    const allocator = std.heap.page_allocator;
+    var mutable_allocator = allocator; // Create a mutable copy of the allocator
+    const data = try readData("grad.txt", &mutable_allocator);
+    defer for (data) |*row| mutable_allocator.free(row); // Free each allocated row in data.
 
-    var allocator = std.heap.page_allocator;
-
-    var initialParams: [2]f32 = [2]f32{ 0.0, 0.0 }; // Initialize model parameters.
-    var initialParamsSlice: []f32 = initialParams[0..];
+    const initialParams: [2]f32 = [2]f32{ 0.0, 0.0 }; // Initialize model parameters.
+    const initialParamsSlice: []f32 = initialParams[0..];
 
     const learningRate: f32 = 0.01; // Set learning rate.
     const epochs: u32 = 1000; // Set number of training epochs.
 
-    var finalParams = try SGD(data, initialParamsSlice, learningRate, epochs); // Execute SGD.
+    const finalParams = try SGD(data, initialParamsSlice, learningRate, epochs); // Execute SGD.
     std.debug.print("Final parameters: {}\n", .{finalParams}); // Output the final optimized parameters.
 }
 
@@ -79,42 +80,36 @@ pub fn main() !void {
 /// Description: Reads data from a text file and returns it as a 2D array of floats.
 /// Input: filename - string containing the name of the text file.
 /// Output: 2D array of floats containing the dataset.
-fn readData(filename: []const u8) ![][]f32 {
-    var file = try std.fs.cwd().openFile(filename, std.fs.File.OpenFlag.read);
+fn readData(filename: []const u8, allocator: *std.mem.Allocator) ![][]f32 {
+    const file = try std.fs.cwd().openFile(filename, .{ .read = true });
     defer file.close();
 
-    var allocator = std.heap.page_allocator;
+    var data = std.ArrayList([]f32).init(allocator);
 
-    // Allocate memory for the outer array.
-    var data = try allocator.alloc([]f32, 100); // Assuming max 100 rows for simplicity.
-    var count: usize = 0; // To keep track of number of rows in the data array.
+    // BufferedReader for efficient file reading.
+    var reader = io.BufferedReader.init(file.reader());
 
-    const buffer_size = 1024; // Size of the static buffer.
-    const buffer = [_]u8{0} ** buffer_size; // Declare a static buffer which will be used by the BufferedReader to store read data temporarily.
-    
-    // Create a BufferedReader to efficiently read the file. The BufferedReader uses the static buffer we provided.
-    var reader = io.bufferedReader(file.reader()).reader();
-
-    // Continuously read each line from the file until EOF is encountered. Assumes that each line ends with '\n'.
+    // Read each line from the file until EOF.
     while (true) {
-        const line = try reader.readUntilDelimiterOrEof('\n');
-        if (line == null) break; // When readUntilDelimiterOrEof returns null, it signals EOF, so break the while loop.
+        const line = try reader.readUntilDelimiterOrEofAlloc(allocator, '\n', 1024);
+        defer allocator.free(line.buf); // Free the line buffer after processing.
+        if (line.buf.len == 0) break; // EOF check.
 
-        // line is a slice pointing to the part of the buffer containing the line read from the file (excluding the newline character if any).
-        // Process the line here (e.g., split the line on commas, parse each field).
+        // Split the line into tokens based on commas.
+        const tokens = std.mem.split(line.buf, ",");
+        var data_row = try allocator.alloc(f32, tokens.len); // Allocate a row for the parsed float data.
 
-        // Example of processing the line (not robust, for simple parsing demonstration)
-        var cells = std.mem.tokenize(line.?, ",");
-        var data_row = try allocator.alloc(f32, 4); // example: assuming each line will have 4 float numbers
-        defer allocator.free(data_row); // Defer the deallocation of data_row to when it goes out of scope.
+        // Convert each token into a floating-point number.
         var index: usize = 0;
-        for (cells) |cell| {
-            data_row[index] = try std.fmt.parseFloat(f32, cell); // Convert each cell into a floating-point number and store it in data_row.
+        for (tokens) |token| {
+            data_row[index] = try std.fmt.parseFloat(f32, token);
             index += 1;
         }
-        data[count] = data_row; // Store the parsed row in the data array.
-        count += 1;
+
+        // Append the parsed row to the data array.
+        try data.append(data_row);
     }
 
-    return data[0..count];
+    // Return the data as a slice.
+    return data.toOwnedSlice();
 }
