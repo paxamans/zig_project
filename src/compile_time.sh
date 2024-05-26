@@ -3,7 +3,7 @@
 # Start timing
 start_time=$(date +%s%N) # Capture start time in nanoseconds
 
-zig build-exe hw.zig
+zig build-exe sgd.zig
 
 # End timing
 end_time=$(date +%s%N) # Capture end time in nanoseconds
