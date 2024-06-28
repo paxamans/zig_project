@@ -58,25 +58,6 @@ pub fn SGD(data: [][]const f32, initialParams: []f32, learningRate: f32, epochs:
     return params;
 }
 
-/// Function: main
-/// Description: Main entry point of the program. Initializes parameters and executes the SGD algorithm.
-/// Calls readData to read the dataset from file, and finally prints the optimized parameters.
-pub fn main() !void {
-    const allocator = std.heap.page_allocator;
-    var mutable_allocator = allocator; // Create a mutable copy of the allocator
-    const data = try readData("grad.txt", &mutable_allocator);
-    defer for (data) |*row| mutable_allocator.free(*row); // Free each allocated row in data.
-
-    const initialParams: [2]f32 = [2]f32{ 0.0, 0.0 }; // Initialize model parameters.
-    const initialParamsSlice: []f32 = initialParams[0..];
-
-    const learningRate: f32 = 0.01; // Set learning rate.
-    const epochs: u32 = 1000; // Set number of training epochs.
-
-    const finalParams = try SGD(data, initialParamsSlice, learningRate, epochs); // Execute SGD.
-    std.debug.print("Final parameters: {}\n", .{finalParams}); // Output the final optimized parameters.
-}
-
 /// Function: readData
 /// Description: Reads data from a text file and returns it as a 2D array of floats.
 /// Input: filename - string containing the name of the text file.
@@ -114,3 +95,24 @@ fn readData(filename: []const u8, allocator: *std.mem.Allocator) ![][]f32 {
     // Return the data as a slice.
     return data.toOwnedSlice();
 }
+
+/// Function: main
+/// Description: Main entry point of the program. Initializes parameters and executes the SGD algorithm.
+/// Calls readData to read the dataset from file, and finally prints the optimized parameters.
+pub fn main() !void {
+    const allocator = std.heap.page_allocator;
+    var mutable_allocator = allocator; // Create a mutable copy of the allocator
+    const data = try readData("grad.txt", &mutable_allocator);
+    defer for (data) |*row| mutable_allocator.free(*row); // Free each allocated row in data.
+
+    const initialParams: [2]f32 = [2]f32{ 0.0, 0.0 }; // Initialize model parameters.
+    const initialParamsSlice: []f32 = initialParams[0..];
+
+    const learningRate: f32 = 0.01; // Set learning rate.
+    const epochs: u32 = 1000; // Set number of training epochs.
+
+    const finalParams = try SGD(data, initialParamsSlice, learningRate, epochs); // Execute SGD.
+    std.debug.print("Final parameters: {}\n", .{finalParams}); // Output the final optimized parameters.
+}
+
+
