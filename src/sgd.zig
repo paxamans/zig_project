@@ -43,7 +43,7 @@ pub fn SGD(data: [][]const f32, initialParams: []f32, learningRate: f32, epochs:
     const gradients = try allocator.alloc(f32, param_len);
     defer allocator.free(gradients);
 
-    for (0..epochs) |_| { // `|_|` for unused epoch capture.
+    for (0..epochs) { // Removed unused epoch capture.
         for (data) |sample| { // `|sample|` to correctly handle sample iteration.
             const rand_index = rng.random.usize(0, data.len - 1);
 
