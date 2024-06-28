@@ -43,7 +43,7 @@ pub fn SGD(data: [][]const f32, initialParams: []f32, learningRate: f32, epochs:
     const gradients = try allocator.alloc(f32, param_len);
     defer allocator.free(gradients);
 
-    for (0..epochs) { // Removed unused epoch capture.
+    for (0..epochs) |_| { // Removed unused epoch capture.
         for (data) |sample| { // `|sample|` to correctly handle sample iteration.
             const rand_index = rng.random.usize(0, data.len - 1);
 
@@ -114,5 +114,3 @@ pub fn main() !void {
     const finalParams = try SGD(data, initialParamsSlice, learningRate, epochs); // Execute SGD.
     std.debug.print("Final parameters: {}\n", .{finalParams}); // Output the final optimized parameters.
 }
-
-
