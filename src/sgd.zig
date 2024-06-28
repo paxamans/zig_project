@@ -1,5 +1,6 @@
 const std = @import("std");
 const io = std.io;
+const rand = std.rand;
 
 /// Function: updateWeights
 /// Description: Update the weights of the model using gradient descent algorithm.
@@ -16,7 +17,7 @@ pub fn updateWeights(weights: []f32, gradients: []f32, learningRate: f32) void {
 /// Description: Computes gradients based on the current model prediction error.
 /// Input: sample - single data sample (feature vector), gradients - array to hold computed gradients, weights - current model weights.
 /// Output: Fills the gradients array with computed gradient values.
-fn computeGradient(sample: []const f32, gradients: []f32, weights: []const f32) void {
+fn computeGradient(sample: []const f32, gradients: []f32, weights: []f32) void {
     // Extract feature and label from sample.
     const x = sample[0];
     const y = sample[1];
@@ -43,8 +44,8 @@ pub fn SGD(data: [][]const f32, initialParams: []f32, learningRate: f32, epochs:
     defer allocator.free(gradients);
 
     for (0..epochs) |_| { // `|_|` for unused epoch capture.
-        for (data) |_| { // `|sample|` to correctly handle sample iteration.
-            const rand_index = rng.random.usize(0, data.len);
+        for (data) |sample| { // `|sample|` to correctly handle sample iteration.
+            const rand_index = rng.random.usize(0, data.len - 1);
 
             // Calculate gradients for the current sample.
             computeGradient(data[rand_index], gradients, params);
@@ -64,7 +65,7 @@ pub fn main() !void {
     const allocator = std.heap.page_allocator;
     var mutable_allocator = allocator; // Create a mutable copy of the allocator
     const data = try readData("grad.txt", &mutable_allocator);
-    defer for (data) |*row| mutable_allocator.free(row); // Free each allocated row in data.
+    defer for (data) |*row| mutable_allocator.free(*row); // Free each allocated row in data.
 
     const initialParams: [2]f32 = [2]f32{ 0.0, 0.0 }; // Initialize model parameters.
     const initialParamsSlice: []f32 = initialParams[0..];
